@@ -1,0 +1,199 @@
+# 1. NAMESPACE (Isolamento por Cliente/Ambiente)
+resource "kubernetes_namespace" "ns" {
+  for_each = local.instances_map
+  metadata {
+    name = each.value.instance_id
+  }
+}
+
+# 2. DATABASE SERVICE (Acesso interno ao Postgres)
+resource "kubernetes_service" "postgres_service" {
+  for_each = local.instances_map
+
+  metadata {
+    name      = "db-service"
+    namespace = kubernetes_namespace.ns[each.key].metadata[0].name
+  }
+
+  spec {
+    selector = { app = "postgres" }
+    port {
+      port        = 5432
+      target_port = 5432
+    }
+    cluster_ip = "None" 
+  }
+}
+
+# 3. DATABASE (PostgreSQL StatefulSet)
+resource "kubernetes_stateful_set" "postgres" {
+  for_each = local.instances_map
+
+  metadata {
+    name      = "postgres"
+    namespace = kubernetes_namespace.ns[each.key].metadata[0].name
+  }
+
+  spec {
+    service_name = "db-service"
+    replicas     = 1
+    selector { match_labels = { app = "postgres" } }
+
+    template {
+      metadata { labels = { app = "postgres" } }
+      spec {
+        container {
+          name  = "postgres"
+          image = "postgres:15-alpine"
+
+          resources {
+            limits = {
+              cpu    = "0.2"
+              memory = "256Mi"
+            }
+            requests = {
+              cpu    = "0.1"
+              memory = "128Mi"
+            }
+            
+          }
+          env {
+            name  = "POSTGRES_DB"
+            value = "postgres"
+          }
+          env {
+            name  = "POSTGRES_USER"
+            value = "odoo"
+          }
+          env {
+            name  = "POSTGRES_PASSWORD"
+            value = "odoo"
+          }
+          
+          port { container_port = 5432 }
+          
+          volume_mount {
+            name       = "postgres-storage"
+            mount_path = "/var/lib/postgresql/data"
+          }
+        }
+      }
+    }
+
+    volume_claim_template {
+      metadata { name = "postgres-storage" }
+      spec {
+        access_modes = ["ReadWriteOnce"]
+        resources { requests = { storage = "1Gi" } }
+      }
+    }
+  }
+}
+
+# 4. ODOO BACKEND (O Servidor de Aplicação)
+resource "kubernetes_deployment" "odoo" {
+  for_each = local.instances_map
+
+  metadata {
+    name      = "odoo"
+    namespace = kubernetes_namespace.ns[each.key].metadata[0].name
+  }
+
+  spec {
+    replicas = 1
+    selector { match_labels = { app = "odoo" } }
+
+    template {
+      metadata { labels = { app = "odoo" } }
+      spec {
+        container {
+          name  = "odoo"
+          image = "odoo:16.0"
+            resources {
+            limits = {
+              cpu    = "0.5"
+              memory = "512Mi"
+            }
+            requests = {
+              cpu    = "0.2"
+              memory = "256Mi"
+            }
+          }
+          
+          # Variáveis de conexão com o banco de dados
+          env {
+            name  = "HOST"
+            value = "db-service"
+          }
+          env {
+            name  = "USER"
+            value = "odoo"
+          }
+          env {
+            name  = "PASSWORD"
+            value = "odoo"
+          }
+
+          port { container_port = 8069 }
+        }
+      }
+    }
+  }
+}
+
+# 5. ODOO SERVICE (Expõe o backend internamente para o Ingress)
+resource "kubernetes_service" "odoo_service" {
+  for_each = local.instances_map
+
+  metadata {
+    name      = "odoo-service"
+    namespace = kubernetes_namespace.ns[each.key].metadata[0].name
+  }
+
+  spec {
+    selector = { app = "odoo" }
+    port {
+      port        = 80
+      target_port = 8069
+    }
+    type = "ClusterIP"
+  }
+}
+
+# 6. INGRESS (A porta de entrada HTTPS)
+resource "kubernetes_ingress_v1" "odoo_ingress" {
+  for_each = local.instances_map
+
+  metadata {
+    name      = "odoo-ingress"
+    namespace = kubernetes_namespace.ns[each.key].metadata[0].name
+    annotations = {
+      "nginx.ingress.kubernetes.io/ssl-redirect" = "true"
+    }
+  }
+
+  spec {
+    ingress_class_name = "nginx"
+    
+    tls {
+      hosts       = [each.value.domain]
+      secret_name = "odoo-tls-secret" 
+    }
+
+    rule {
+      host = each.value.domain
+      http {
+        path {
+          path = "/"
+          path_type = "Prefix"
+          backend {
+            service {
+              name = kubernetes_service.odoo_service[each.key].metadata[0].name
+              port { number = 80 }
+            }
+          }
+        }
+      }
+    }
+  }
+}
