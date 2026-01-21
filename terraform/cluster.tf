@@ -1,9 +1,7 @@
 resource "minikube_cluster" "cluster" {
-  for_each     = local.instances_map
-  cluster_name = each.value.instance_id
+  cluster_name = "cluster-${terraform.workspace}" 
   driver       = "docker"
   memory       = 1024
-  cpus         = 1
+  cpus         = 2
   addons       = ["ingress", "storage-provisioner", "default-storageclass"]
 }
-

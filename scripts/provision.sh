@@ -1,46 +1,36 @@
-cd "$(dirname "$0")/../terraform"
+#!/bin/bash
+set -e
 
+# Cores para o terminal
+GREEN='\033[0;32m'
+NC='\033[0m'
 
+TERRAFORM_DIR="terraform"
+# Lista baseada nos seus dados em locals.tf [cite: 5, 6]
+ENVIRONMENTS=("airbnb-dev" "airbnb-prod" "nike-dev" "nike-qa" "nike-prod" "mcdonalds-dev" "mcdonalds-qa" "mcdonalds-beta" "mcdonalds-prod")
 
-# Get the list of instances from terraform output (or hardcode for now)
-# For simplicity, we define the loop here based on your requirements
-CLIENTS=("airbnb" "nike" "mcdonalds")
-ENV_AIRBNB=("dev" "prod")
-ENV_NIKE=("dev" "qa" "prod")
-ENV_MCDONALDS=("dev" "qa" "beta" "prod")
+echo "🚀 Iniciando Implantação Sequencial..."
 
-provision() {
-    local client=$1
-    local env=$2
-    local id="${client}-${env}"
-    
-    echo "----------------------------------------------------------"
-    echo "🚀 Provisioning Cluster: $id"
-    echo "----------------------------------------------------------"
-    
-    # We apply specifically the resources for this instance
-    # The -target flag ensures we don't try to boot everything at once
-    terraform apply -var-file=env.tfvars \
-      -target="minikube_cluster.cluster[\"$id\"]" \
-      -target="kubernetes_namespace.ns[\"$id\"]" \
-      -target="kubernetes_stateful_set.postgres[\"$id\"]" \
-      -target="kubernetes_deployment.odoo[\"$id\"]" \
-      -target="kubernetes_ingress_v1.odoo_ingress[\"$id\"]" \
-      -target="kubernetes_secret.odoo_tls[\"$id\"]" \
-      -auto-approve
+cd "$TERRAFORM_DIR"
 
-    echo "✅ Finished $id"
-}
+for env in "${ENVIRONMENTS[@]}"; do
+  echo -e "${GREEN}📦 Implantando Ambiente: $env${NC}"
+  
+  # 1. Provisiona apenas o cluster Minikube específico 
+  terraform apply -target="minikube_cluster.cluster[\"$env\"]" -var-file="env.tfvars" -auto-approve
 
-# Run the loop
-for c in "${CLIENTS[@]}"; do
-    case $c in
-        airbnb) envs=("${ENV_AIRBNB[@]}") ;;
-        nike) envs=("${ENV_NIKE[@]}") ;;
-        mcdonalds) envs=("${ENV_MCDONALDS[@]}") ;;
-    esac
-    
-    for e in "${envs[@]}"; do
-        provision $c $e
-    done
+  # 2. Configura o contexto do kubectl para o novo cluster
+  minikube update-context -p "$env"
+  
+  # 3. Provisiona os recursos K8s dentro desse cluster [cite: 7, 20]
+  terraform apply \
+    -target="kubernetes_namespace.ns[\"$env\"]" \
+    -target="kubernetes_stateful_set.postgres[\"$env\"]" \
+    -target="kubernetes_service.postgres_service[\"$env\"]" \
+    -target="kubernetes_deployment.odoo[\"$env\"]" \
+    -target="kubernetes_service.odoo_service[\"$env\"]" \
+    -target="kubernetes_ingress_v1.odoo_ingress[\"$env\"]" \
+    -var-file="env.tfvars" -auto-approve
+
+  echo -e "✅ Ambiente $env concluído.\n"
 done

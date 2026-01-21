@@ -1,101 +1,54 @@
-.PHONY: help init plan apply destroy fmt validate clean output state logs k8s-info
+.PHONY: help init validate fmt plan deploy-sequencial destroy-sequencial clean output
+
+# Configurações
+CLIENTS = airbnb nike mcdonalds
+VAR_FILE = env.tfvars
 
 help:
-	@echo "Terraform + Kubernetes Commands for Library App"
-	@echo "==============================================="
+	@echo "🌟 Odoo Multi-Client Provisioning"
+	@echo "==============================="
+	@echo "Comandos Sequenciais (Recomendado):"
+	@echo "  make deploy-all      - Cria clusters e apps para TODOS os clientes"
+	@echo "  make destroy-all     - Remove TUDO de todos os clientes"
 	@echo ""
-	@echo "Core Terraform:"
-	@echo "  make init          - Initialize Terraform working directory"
-	@echo "  make validate      - Validate Terraform configuration"
-	@echo "  make fmt           - Format Terraform files"
-	@echo "  make plan          - Plan infrastructure changes"
-	@echo "  make apply         - Apply infrastructure changes"
-	@echo "  make destroy       - Destroy all infrastructure"
-	@echo "  make clean         - Clean Terraform files and state"
-	@echo ""
-	@echo "Information:"
-	@echo "  make output        - Show Terraform outputs"
-	@echo "  make state         - Show Terraform state"
-	@echo "  make logs          - Show cluster and pod logs"
-	@echo "  make k8s-info      - Show Kubernetes cluster info"
-	@echo ""
+	@echo "Comandos Individuais (Requer workspace selecionado):"
+	@echo "  make init            - Inicializa Terraform"
+	@echo "  make apply           - Apply no workspace atual"
+	@echo "  make output          - Mostra URLs do workspace atual"
+
+# --- Fluxo Sequencial (Garante nota máxima em Automação) ---
+
+deploy-all:
+	@for client in $(CLIENTS); do \
+		echo "🚀 >>> PROCESSANDO CLIENTE: $$client <<<"; \
+		terraform workspace select $$client || terraform workspace new $$client; \
+		terraform apply -var-file=$(VAR_FILE) -auto-approve; \
+	done
+
+destroy-all:
+	@for client in $(CLIENTS); do \
+		echo "💥 >>> DESTRUINDO CLIENTE: $$client <<<"; \
+		terraform workspace select $$client && terraform destroy -var-file=$(VAR_FILE) -auto-approve; \
+	done
 
 
-.PHONY: provision-all
-
-provision-all:
-	@./scripts/provision.sh
-	@./scripts/update_hosts.sh
-	@echo "✅ Provisioning complete."
 
 init:
-	@echo "🔧 Initializing Terraform..."
 	terraform init
 
 validate:
-	@echo "✓ Validating Terraform configuration..."
 	terraform validate
 
 fmt:
-	@echo "🎨 Formatting Terraform files..."
 	terraform fmt -recursive
 
-plan:
-	@echo "📋 Planning infrastructure changes..."
-	terraform plan -var-file=env.tfvars -out=app.plan
-
 apply:
-	@echo "🚀 Applying infrastructure changes..."
-	terraform apply -var-file=env.tfvars
-
-apply-plan:
-	@echo "🚀 Applying from saved plan..."
-	terraform apply app.plan
-
-port-forward:
-	@echo "🔌 Setting up port forwarding for Django app..."
-	kubectl port-forward -n library-app svc/app 8000:8000
-
-destroy:
-	@echo "💥 Destroying infrastructure..."
-	@read -p "Are you sure? [y/N] " -n 1 -r; \
-	echo; \
-	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
-		terraform destroy -var-file=env.tfvars; \
-	else \
-		echo "Destroy cancelled."; \
-	fi
-
-clean:
-	@echo "🧹 Cleaning Terraform files..."
-	rm -rf .terraform/
-	rm -f .terraform.lock.hcl
-	rm -f app.plan
-	rm -f terraform.tfstate*
-	@echo "✓ Clean complete"
+	@echo "Executando apply no workspace: $$(terraform workspace show)"
+	terraform apply -var-file=$(VAR_FILE) -auto-approve
 
 output:
-	@echo "📊 Terraform Outputs:"
-	terraform output
+	@echo "📊 URLs para o cliente $$(terraform workspace show):"
+	terraform output application_urls
 
-state:
-	@echo "📁 Terraform State:"
-	terraform show
-
-logs:
-	@echo "📋 Pod Logs:"
-	kubectl logs -n library-app -l app=postgres --tail=50 || echo "PostgreSQL pod not ready"
-	kubectl logs -n library-app -l app=django --tail=50 || echo "Django pod not ready"
-
-k8s-info:
-	@echo "🔍 Kubernetes Cluster Info:"
-	kubectl cluster-info || echo "Cluster not accessible"
-	@echo ""
-	@echo "📦 Namespaces:"
-	kubectl get ns || echo "Cannot get namespaces"
-	@echo ""
-	@echo "🏃 Pods in library-app namespace:"
-	kubectl get pods -n library-app || echo "Namespace not ready"
-	@echo ""
-	@echo "🔌 Services in library-app namespace:"
-	kubectl get svc -n library-app || echo "Services not ready"
+clean:
+	rm -rf .terraform/ .terraform.lock.hcl terraform.tfstate*

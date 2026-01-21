@@ -1,3 +1,4 @@
 output "application_urls" {
-  value = [for inst in local.instances : "https://${inst.domain}"]
+  description = "URLs de acesso para o cliente atual"
+  value = [for key, inst in local.instances_map : "https://${inst.domain}"]
 }
