@@ -1,10 +1,11 @@
-variable "clients" {
-  description = "Mapa de clientes e seus ambientes"
-  type = map(object({
-    environments = list(string)
-  }))
+variable "client_config" {
+  type = map(list(string))
+  default = {
+    airbnb    = ["dev", "prod"]
+    nike      = ["dev", "qa", "prod"]
+    mcdonalds = ["dev", "qa", "beta", "prod"]
+  }
 }
-
 
 variable "db_user" {
   default = "odoo"

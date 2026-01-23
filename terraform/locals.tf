@@ -1,15 +1,13 @@
 locals {
-  # Filtra o cliente atual com base no workspace selecionado
-  client_name = terraform.workspace
-  client_data = var.clients[local.client_name]
+  # Busca a lista de ambientes (ex: ["dev", "prod"]) para o workspace atual
+  ambientes_do_cliente = lookup(var.client_config, terraform.workspace, [])
 
-  # Cria o mapa de ambientes para este cliente específico
+  # Cria o mapa que todos os recursos usam no for_each
   instances_map = {
-    for env in local.client_data.environments : 
-    env => {
-      namespace = "${local.client_name}-${env}"
-      domain    = "odoo.${env}.${local.client_name}.local"
-      env_name  = env
+    for env in local.ambientes_do_cliente : env => {
+      namespace = "${terraform.workspace}-${env}"
+      domain    = "odoo.${env}.${terraform.workspace}.local"
+      client    = terraform.workspace
     }
   }
 }

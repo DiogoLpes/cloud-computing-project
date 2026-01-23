@@ -1,23 +1,25 @@
 #!/bin/bash
 
-# This script needs sudo to edit /etc/hosts
-echo "Updating /etc/hosts..."
+# Script para atualizar o ficheiro /etc/hosts com os domínios e IPs do Minikube
+CLUSTER_NAME="cluster-$(terraform workspace show)"
+IP=$(minikube ip -p "$CLUSTER_NAME")
 
-# Get all cluster names
-CLUSTERS=$(minikube profile list -o json | jq -r '.valid[].Name' 2>/dev/null)
+if [ -z "$IP" ]; then
+    echo "❌ Erro: Não foi possível obter o IP do Minikube para o cluster $CLUSTER_NAME"
+    exit 1
+fi
 
-for CLUSTER in $CLUSTERS; do
-    IP=$(minikube ip -p $CLUSTER)
-    # Extract client and env from name (format: client-env)
-    CLIENT=$(echo $CLUSTER | cut -d'-' -f1)
-    ENV=$(echo $CLUSTER | cut -d'-' -f2)
-    DOMAIN="odoo.${ENV}.${CLIENT}.local"
+echo "🌐 IP detetado para o cluster $CLUSTER_NAME: $IP"
 
-    # Remove old entry if exists
-    sudo sed -i "/$DOMAIN/d" /etc/hosts
+# Busca todos os domínios definidos no Terraform para o cliente atual
+DOMAINS=$(terraform output ../terraform/outputs.tf | jq -r '.[]' | sed 's/https:\/\///g')
+
+for DOMAIN in $DOMAINS; do
+    echo "🔗 A mapear $DOMAIN para $IP..."
     
-    # Add new entry
-    echo "$IP $DOMAIN" | sudo tee -a /etc/hosts
+    # Remove a entrada antiga se existir e adiciona a nova no /etc/hosts
+    sudo sed -i "/$DOMAIN/d" /etc/hosts
+    echo "$IP $DOMAIN" | sudo tee -a /etc/hosts > /dev/null
 done
 
-echo "Hosts updated successfully."
+echo "✅ Ficheiro /etc/hosts atualizado com sucesso!"

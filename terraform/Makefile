@@ -1,9 +1,5 @@
 .PHONY: help init validate fmt plan deploy-sequencial destroy-sequencial clean output
 
-# Configurações
-CLIENTS = airbnb nike mcdonalds
-VAR_FILE = env.tfvars
-
 help:
 	@echo "🌟 Odoo Multi-Client Provisioning"
 	@echo "==============================="
@@ -16,14 +12,41 @@ help:
 	@echo "  make apply           - Apply no workspace atual"
 	@echo "  make output          - Mostra URLs do workspace atual"
 
-# --- Fluxo Sequencial (Garante nota máxima em Automação) ---
+# Variáveis
+TF_DIR = .
+CLIENTS = airbnb nike mcdonalds
 
-deploy-all:
-	@for client in $(CLIENTS); do \
-		echo "🚀 >>> PROCESSANDO CLIENTE: $$client <<<"; \
-		terraform workspace select $$client || terraform workspace new $$client; \
-		terraform apply -var-file=$(VAR_FILE) -auto-approve; \
-	done
+.PHONY: all init apply-all clean
+
+# Comando padrão
+all: init apply-all
+
+init:
+	terraform init -upgrade
+	-terraform workspace new airbnb
+	-terraform workspace new nike
+	-terraform workspace new mcdonalds
+
+
+apply:
+	@if [ -z "$(client)" ]; then echo "Error: Please specify client (e.g., make apply client=airbnb)"; exit 1; fi
+	terraform workspace select $(client)
+	terraform apply -auto-approve -parallelism=1
+	./scripts/update_hosts.sh
+
+
+apply-all: init
+	$(MAKE) apply client=airbnb
+	$(MAKE) apply client=nike
+	$(MAKE) apply client=mcdonalds
+
+# Limpeza total (Cuidado: apaga tudo no Docker/Minikube)
+clean:
+	@echo "⚠️ A limpar todos os recursos..."
+	-minikube delete --all
+	-docker system prune -f
+	-rm -rf terraform.tfstate* .terraform/ certs/ .terraform.lock.hcl
+
 
 destroy-all:
 	@for client in $(CLIENTS); do \
@@ -33,22 +56,16 @@ destroy-all:
 
 
 
-init:
-	terraform init
+# Atualiza o arquivo hosts (requer senha sudo se não estiver em DevContainer root)
+hosts: 
+	./scripts/update_hosts.sh
 
-validate:
-	terraform validate
+# Valida os ambientes com curl
+validate: 
+	./scripts/validate.sh
+	
 
-fmt:
-	terraform fmt -recursive
+# Atalho completo para um cliente
+deploy: 
+	apply-all hosts validate
 
-apply:
-	@echo "Executando apply no workspace: $$(terraform workspace show)"
-	terraform apply -var-file=$(VAR_FILE) -auto-approve
-
-output:
-	@echo "📊 URLs para o cliente $$(terraform workspace show):"
-	terraform output application_urls
-
-clean:
-	rm -rf .terraform/ .terraform.lock.hcl terraform.tfstate*

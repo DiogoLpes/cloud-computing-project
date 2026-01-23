@@ -1,17 +1,22 @@
 terraform {
   required_providers {
     minikube = {
-      source  = "scott-the-programmer/minikube"
+      source = "scott-the-programmer/minikube"
       version = "0.4.4"
     }
     kubernetes = {
       source  = "hashicorp/kubernetes"
-      version = "2.25.2"
+      version = ">= 2.0.0"
+    }
+    null = {
+      source = "hashicorp/null"
     }
   }
 }
 
-provider "minikube" {}
+provider "minikube" {
+  kubernetes_version = "v1.30.0"
+}
 
 provider "kubernetes" {
   host                   = minikube_cluster.cluster.host

@@ -1,4 +1,5 @@
-resource "kubernetes_namespace" "ns" {
+# 1. NAMESPACE
+resource "kubernetes_namespace_v1" "ns" {
   for_each = local.instances_map
   metadata {
     name = each.value.namespace
@@ -11,7 +12,7 @@ resource "kubernetes_service" "postgres_service" {
 
   metadata {
     name      = "db-service"
-    namespace = kubernetes_namespace.ns[each.key].metadata[0].name
+    namespace = kubernetes_namespace_v1.ns[each.key].metadata[0].name
   }
 
   spec {
@@ -20,7 +21,6 @@ resource "kubernetes_service" "postgres_service" {
       port        = 5432
       target_port = 5432
     }
-    cluster_ip = "None" 
   }
 }
 
@@ -30,7 +30,7 @@ resource "kubernetes_stateful_set" "postgres" {
 
   metadata {
     name      = "postgres"
-    namespace = kubernetes_namespace.ns[each.key].metadata[0].name
+    namespace = kubernetes_namespace_v1.ns[each.key].metadata[0].name
   }
 
   spec {
@@ -90,13 +90,13 @@ resource "kubernetes_stateful_set" "postgres" {
   }
 }
 
-# 4. ODOO BACKEND (O Servidor de Aplicação)
-resource "kubernetes_deployment" "odoo" {
+# 4. ODOO DEPLOYMENT 
+resource "kubernetes_deployment_v1" "odoo" {
   for_each = local.instances_map
 
   metadata {
     name      = "odoo"
-    namespace = kubernetes_namespace.ns[each.key].metadata[0].name
+    namespace = kubernetes_namespace_v1.ns[each.key].metadata[0].name
   }
 
   spec {
@@ -109,29 +109,19 @@ resource "kubernetes_deployment" "odoo" {
         container {
           name  = "odoo"
           image = "odoo:16.0"
-            resources {
-            limits = {
-              cpu    = "0.5"
-              memory = "512Mi"
-            }
-            requests = {
-              cpu    = "0.2"
-              memory = "256Mi"
-            }
-          }
-          
-          # Variáveis de conexão com o banco de dados
           env {
             name  = "HOST"
             value = "db-service"
           }
+          
           env {
             name  = "USER"
-            value = var.clients[local.client_name].db_user
+            value = var.db_user
           }
+          
           env {
             name  = "PASSWORD"
-            value = var.clients[local.client_name].db_password
+            value = var.db_password
           }
 
           port { container_port = 8069 }
@@ -147,7 +137,7 @@ resource "kubernetes_service" "odoo_service" {
 
   metadata {
     name      = "odoo-service"
-    namespace = kubernetes_namespace.ns[each.key].metadata[0].name
+    namespace = kubernetes_namespace_v1.ns[each.key].metadata[0].name
   }
 
   spec {
