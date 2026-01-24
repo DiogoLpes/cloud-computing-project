@@ -1,5 +1,4 @@
 # ☁️ Cloud Computing Project - Odoo Multi-Instance Cluster
-
 Este projeto automatiza o deployment de instâncias multi-tenant do ERP **Odoo** num cluster **Kubernetes (Minikube)** utilizando **Terraform**.
 
 ## 🚀 Arquitetura
@@ -48,4 +47,9 @@ make hosts
 ### 5. Validação 
 ```bash
 make validate
+```
+
+### 6. Limpeza
+```bash
+make clean
 ```

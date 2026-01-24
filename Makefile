@@ -22,6 +22,7 @@ CLIENTS = airbnb nike mcdonalds
 all: init apply-all
 
 init:
+	cd $(TF_DIR)
 	terraform init -upgrade
 	-terraform workspace new airbnb
 	-terraform workspace new nike
@@ -29,12 +30,14 @@ init:
 
 
 apply:
+	cd $(TF_DIR)
 	@if [ -z "$(client)" ]; then echo "Error: Please specify client (e.g., make apply client=airbnb)"; exit 1; fi
 	terraform workspace select $(client)
 	terraform apply -auto-approve -parallelism=1
 
 
-apply-all: 
+apply-all:
+	cd $(TF_DIR)
 	$(MAKE) apply client=airbnb
 	$(MAKE) apply client=nike
 	$(MAKE) apply client=mcdonalds
@@ -42,12 +45,14 @@ apply-all:
 # Limpeza total (Cuidado: apaga tudo no Docker/Minikube)
 clean:
 	@echo "⚠️ A limpar todos os recursos..."
+	cd $(TF_DIR)
 	-minikube delete --all
 	-docker system prune -f
 	-rm -rf terraform.tfstate* .terraform/ certs/ .terraform.lock.hcl
 
 
 destroy-all:
+	cd $(TF_DIR)
 	@for client in $(CLIENTS); do \
 		echo "💥 >>> DESTRUINDO CLIENTE: $$client <<<"; \
 		terraform workspace select $$client && terraform destroy -var-file=$(VAR_FILE) -auto-approve; \
@@ -63,8 +68,4 @@ hosts:
 validate: 
 	./scripts/validate.sh
 	
-
-# Atalho completo para um cliente
-deploy: 
-	apply-all hosts validate
 
