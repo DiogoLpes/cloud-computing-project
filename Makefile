@@ -32,10 +32,9 @@ apply:
 	@if [ -z "$(client)" ]; then echo "Error: Please specify client (e.g., make apply client=airbnb)"; exit 1; fi
 	terraform workspace select $(client)
 	terraform apply -auto-approve -parallelism=1
-	./scripts/update_hosts.sh
 
 
-apply-all: init
+apply-all: 
 	$(MAKE) apply client=airbnb
 	$(MAKE) apply client=nike
 	$(MAKE) apply client=mcdonalds
@@ -56,7 +55,7 @@ destroy-all:
 
 
 
-# Atualiza o arquivo hosts (requer senha sudo se não estiver em DevContainer root)
+# Atualiza o arquivo hosts 
 hosts: 
 	./scripts/update_hosts.sh
 

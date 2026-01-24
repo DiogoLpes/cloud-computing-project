@@ -1,25 +1,37 @@
 #!/bin/bash
 
-# Script para atualizar o ficheiro /etc/hosts com os domínios e IPs do Minikube
-CLUSTER_NAME="cluster-$(terraform workspace show)"
+# 1. Entrar na pasta onde está o Terraform para saber o workspace e o estado
+cd "$(dirname "$0")/../terraform" || exit
+
+# 2. Obter o nome do cliente/workspace
+CLIENT=$(terraform workspace show)
+CLUSTER_NAME="cluster-$CLIENT"
+
+# 3. Obter o IP do Minikube
 IP=$(minikube ip -p "$CLUSTER_NAME")
 
 if [ -z "$IP" ]; then
-    echo "❌ Erro: Não foi possível obter o IP do Minikube para o cluster $CLUSTER_NAME"
+    echo "❌ Erro: Não foi possível obter o IP para o cluster $CLUSTER_NAME"
     exit 1
 fi
 
 echo "🌐 IP detetado para o cluster $CLUSTER_NAME: $IP"
 
-# Busca todos os domínios definidos no Terraform para o cliente atual
-DOMAINS=$(terraform output ../terraform/outputs.tf | jq -r '.[]' | sed 's/https:\/\///g')
+# 4. Extrair domínios do output do Terraform (forma segura via JSON)
+# Nota: o output 'application_urls' deve estar definido nos teos ficheiros .tf
+DOMAINS=$(terraform output -json application_urls | jq -r '.[]' | sed 's/https:\/\///g')
+
+if [ -z "$DOMAINS" ] || [ "$DOMAINS" == "null" ]; then
+    echo "⚠️ Aviso: Nenhum domínio encontrado no output do Terraform."
+    exit 0
+fi
+
+TEMP_HOSTS=$(grep -v ".mcdonalds.local" /etc/hosts)
 
 for DOMAIN in $DOMAINS; do
     echo "🔗 A mapear $DOMAIN para $IP..."
-    
-    # Remove a entrada antiga se existir e adiciona a nova no /etc/hosts
-    sudo sed -i "/$DOMAIN/d" /etc/hosts
-    echo "$IP $DOMAIN" | sudo tee -a /etc/hosts > /dev/null
+    TEMP_HOSTS+=$'\n'"$IP $DOMAIN"
 done
 
-echo "✅ Ficheiro /etc/hosts atualizado com sucesso!"
+# Escreve tudo de uma vez (precisa de sudo)
+echo "$TEMP_HOSTS" | sudo tee /etc/hosts > /dev/null
